@@ -1,12 +1,14 @@
 <template>
-    <el-main class="main">
-        <AppItem v-for="app in backDatas" :key="app._id" :appData="app" :server="server" @update="updateApps">
-        </AppItem>
-        <el-button class="add-app" type="primary" icon="el-icon-plus" style="margin: 10px;" @update="updateApps"
-            @click="add">
-        </el-button>
-        <router-view :visable.sync="dialogVisible" :dialogTitle="dialogTitle" :server="server" :dialogMode="dialogMode"
-            @update="updateApps"></router-view>
+    <el-main class="main-apps">
+        <div class="wrap-apps">
+            <AppItem v-for="AppData in AppDatas" :key="AppData._id" :AppData="AppData" @updateApps="updateApps">
+            </AppItem>
+            <el-button class="add-app" type="primary" icon="el-icon-plus" style="margin: 10px;" @updateApps="updateApps"
+                @click="add">
+            </el-button>
+            <router-view :visable.sync="dialogVisible" :dialogTitle="dialogTitle" :dialogMode="dialogMode"
+                @updateApps="updateApps"></router-view>
+        </div>
     </el-main>
 </template>
 
@@ -24,11 +26,7 @@ export default {
         }
     },
     props: {
-        server: {
-            type: String,
-            default: ''
-        },
-        backDatas: {
+        AppDatas: {
             type: Array
         }
     },
@@ -56,15 +54,20 @@ export default {
 </script>
 
 <style>
-.main {
-    display: flex !important;
+@media (max-width: 425px) {
+    .wrap-apps {
+        flex-direction: column;
+    }
+}
+
+.wrap-apps {
+    display: flex;
     flex-wrap: wrap;
-    width: 100%;
 }
 
 .add-app {
+    width: 300px;
     height: 150px;
-    flex-basis: 20%;
     margin: 10px;
 }
 

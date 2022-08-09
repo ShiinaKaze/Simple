@@ -1,16 +1,16 @@
 <template>
     <el-dialog :title="dialogTitle" :visible.sync="updateDialogVisable" :center="true" @close="cancel">
         <el-form ref="form" :model="formData">
-            <div v-if="this.dialogMode === 'addApp'">
+            <div v-if="dialogMode === 'addApp'">
                 <el-form-item label="应用名称">
                     <el-input v-model="formData.title"></el-input>
                 </el-form-item>
             </div>
-            <div v-if="this.dialogMode === 'appItem'">
+            <div v-if="dialogMode === 'appItem'">
                 <el-input :placeholder="dialogTitle" v-model="formData.title" :disabled="isDialogEditing === false"
                     style="margin:20px 0">
                 </el-input>
-                <el-button v-if="isDialogEditing === false" type="primary" :disabled="this.appData.state === 'running'"
+                <el-button v-if="isDialogEditing === false" type="primary" :disabled="appState === 'running'"
                     @click="isDialogEditing = true">
                     修改名称
                 </el-button>
@@ -21,30 +21,44 @@
             </div>
         </el-form>
         <div v-if="this.dialogMode === 'appItem'">
+            <h2>Script:</h2>
+            <el-upload class="upload-model" :headers="uploadHeaders" :data="dialogData"
+                :action="getUploadAdress() + '/script'" :limit="1" :file-list="dialogData.scriptFileList"
+                :on-success="handleSuccess" :on-error="handleError"
+                :on-remove="(file, fileList) => { return handleRemove(file, fileList, 'script') }">
+                <el-button :disabled="appState === 'running'" size="small" type="primary" @click="uploadType = 'model'">
+                    点击上传</el-button>
+                <div slot="tip" class="el-upload__tip">只能上传python文件</div>
+            </el-upload>
             <h2>Model:</h2>
-            <el-upload class="upload-model" :data="this.appData" :action="getUploadAdress() + '/model'" :multiple="true"
-                :limit="5" :file-list="this.appData.modelFileList" :on-success="handleSuccess" :on-error="handleError"
+            <el-upload class="upload-model" :headers="uploadHeaders" :data="dialogData"
+                :action="getUploadAdress() + '/model'" :limit="5" :multiple="true" :file-list="dialogData.modelFileList"
+                :on-success="handleSuccess" :on-error="handleError"
                 :on-remove="(file, fileList) => { return handleRemove(file, fileList, 'model') }">
-                <el-button :disabled="this.appData.state === 'running'" size="small" type="primary"
-                    @click="uploadType = 'model'">点击上传</el-button>
-                <div slot="tip" class="el-upload__tip">只能上传jpg/png文件，且不超过500kb</div>
+                <el-button :disabled="appState === 'running'" size="small" type="primary" @click="uploadType = 'model'">
+                    点击上传</el-button>
+                <div slot="tip" class="el-upload__tip">只能上传部署模型文件</div>
             </el-upload>
             <h2>Input:</h2>
-            <el-upload class="upload-model" :data="this.appData" :action="getUploadAdress() + '/input'"
-                :multiple="false" :limit="5" :file-list="this.appData.inputFileList" :on-success="handleSuccess"
-                :on-error="handleError"
+            <el-upload class="upload-model" :headers="uploadHeaders" :data="dialogData"
+                :action="getUploadAdress() + '/input'" :limit="2" :file-list="dialogData.inputFileList"
+                :on-success="handleSuccess" :on-error="handleError"
                 :on-remove="(file, fileList) => { return handleRemove(file, fileList, 'input') }">
-                <el-button :disabled="this.appData.state === 'running'" size="small" type="primary"
-                    @click="uploadType = 'model'">点击上传</el-button>
-                <div slot="tip" class="el-upload__tip">只能上传jpg/png文件，且不超过500kb</div>
+                <el-button :disabled="appState === 'running'" size="small" type="primary" @click="uploadType = 'model'">
+                    点击上传</el-button>
+                <div slot="tip" class="el-upload__tip">只能上传符合部署模型的输入文件</div>
             </el-upload>
-            <h2>Result:</h2>
-            <el-button type="primary" :loading="this.appData.state === 'running'" @click="runApp">{{ isRunning }}
+            <h2>Output:</h2>
+            <el-button type="primary" :loading="appState === 'running'" @click="runApp">{{ dialogStateText }}
             </el-button>
-            <el-button v-if="this.appData.state === 'running'" @click="stopApp">取 消</el-button>
-            <div class="result-preview" style="margin:20px 0">
-                <el-image :preview-src-list="this.appData.resultFileList">
+            <el-button v-if="appData.outputFileList[0] != ''" @click="handleRemove('', '', 'output')">删除
+            </el-button>
+            <el-button v-if="appState === 'running'" @click="stopApp">取 消</el-button>
+            <div class="ouput-preview" style="margin:20px 0">
+                <el-image v-if="appData.outputFileList[0] !== ''" style="width: 20%; height: 20%"
+                    :src="appData.outputFileList[0]" :preview-src-list="appData.outputFileList">
                 </el-image>
+                <el-empty v-loading="appState === 'running'" v-if="appData.outputFileList[0] === ''"></el-empty>
             </div>
         </div>
         <div v-if="this.dialogMode === 'addApp'" slot="footer" class="dialog-footer">
@@ -55,16 +69,18 @@
 </template>
 
 <script>
-import axios from 'axios'
+import axiosInstance from '@/utils/axios'
 
 export default {
     name: 'DialogItem',
     data() {
         return {
-            isRunning: '运行',
+            dialogData: this.appData,
+            dialogStateText: '运行',
             isDialogEditing: false,
-            modelFileList: [],
-            inputFileList: [],
+            uploadHeaders: {
+                Authorization: 'Bearer ' + localStorage.getItem('token')
+            },
             formData: {
                 title: '',
             },
@@ -80,10 +96,6 @@ export default {
             type: String,
             default: ""
         },
-        server: {
-            type: String,
-            default: ''
-        },
         dialogMode: {
             type: String,
             default: ''
@@ -91,6 +103,9 @@ export default {
         appData: {
             type: Object,
         },
+        appState: {
+            type: String
+        }
     },
 
     methods: {
@@ -104,13 +119,13 @@ export default {
                 state: 'normal'
             }
 
-            axios.post(this.server + this.$route.path, this.tempAppData).then(() => {
+            axiosInstance.post(this.$route.path, this.tempAppData).then(() => {
                 this.$notify({
                     title: '添加成功',
                     message: this.tempAppData.title + '添加成功',
                     type: 'success'
                 })
-                this.$emit('update')
+                this.$emit('updateApps')
                 this.formData.title = ''
                 this.tempAppData = {}
 
@@ -129,17 +144,16 @@ export default {
                 return
             }
             this.tempAppData = {
-                _id: this.appData._id,
+                _id: this.dialogData._id,
                 title: this.formData.title,
             }
-            axios.put(this.server + this.$route.path, this.tempAppData).then(() => {
-                console.log('put succeed')
+            axiosInstance.put(this.$route.path, this.tempAppData).then(() => {
                 this.$message({
                     message: '修改成功',
                     type: 'success'
                 })
                 this.tempAppData = {}
-                this.$emit('update')
+                this.$emit('updateApps')
                 this.isDialogEditing = false
             }).catch((err) => {
                 console.log(err)
@@ -164,32 +178,35 @@ export default {
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
+                this.$emit('updateAppState', 'running')
+                this.dialogStateText = '运行中'
                 this.tempAppData = {
-                    _id: this.appData._id,
+                    id: this.dialogData._id,
                     state: 'running'
                 }
-                axios.put(this.server + this.$route.path + '/run', this.tempAppData).then(() => {
-                    console.log('run succeed')
-                    this.isRunning = '运行中'
+                axiosInstance.put(this.$route.path + '/run', this.tempAppData).then(() => {
+                    this.$emit('updateAppState', 'normal')
+                    this.dialogStateText = '运行'
                     this.$message({
                         type: 'success',
                         message: '运行成功!'
                     })
+                    this.$emit('updateApps')
                 }).catch(() => {
+                    this.$emit('updateAppState', 'normal')
+                    this.dialogStateText = '运行'
                     this.$message({
                         type: 'error',
                         message: '运行失败!'
                     })
                 })
-                this.$emit('update')
             }).catch(() => {
-                this.isRunning = '运行'
+                this.dialogStateText = '运行'
                 this.$message({
                     type: 'info',
                     message: '已取消运行'
                 })
             })
-
             this.tempAppData = {}
         },
 
@@ -199,34 +216,38 @@ export default {
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
+                this.$emit('updateAppState', 'normal')
+                this.dialogStateText = '运行'
                 this.tempAppData = {
-                    _id: this.appData._id,
+                    id: this.dialogData._id,
                     state: 'normal'
                 }
-                axios.put(this.server + this.$route.path + '/stop', this.tempAppData).then(() => {
-                    console.log('run succeed')
-                    this.isRunning = '运行'
+                axiosInstance.put(this.$route.path + '/stop', this.tempAppData).then(() => {
+                    this.$emit('updateAppState', 'running')
+                    this.dialogStateText = '运行中'
                     this.$message({
                         type: 'success',
                         message: '取消运行成功!'
                     })
+                    this.$emit('updateApps')
                 }).catch(() => {
+                    this.$emit('updateAppState', 'running')
+                    this.dialogStateText = '运行中'
                     this.$message({
                         type: 'error',
                         message: '取消运行失败!'
                     })
                 })
                 this.tempAppData = {}
-                this.$emit('update')
             })
-
         },
-        handleSuccess() {
+        handleSuccess(response, file) {
             this.$message({
                 type: 'success',
                 message: '文件上传成功!'
             })
-            this.$emit('update')
+            console.log(file)
+            this.$emit('updateApps')
         },
         handleError() {
             this.$message({
@@ -236,10 +257,20 @@ export default {
         },
 
         handleRemove(file, fileList, folderType) {
-            this.tempAppData = this.appData
+            this.tempAppData['id'] = this.dialogData._id
             this.tempAppData['deleteFolderType'] = folderType
+            if (folderType === 'script') {
+                file = {
+                    name: 'script.py'
+                }
+            }
+            if (folderType === 'output') {
+                file = {
+                    name: this.appData.outputFileList[0].split('/')[5]
+                }
+            }
             this.tempAppData['file'] = file
-            axios.delete(this.server + this.$route.path + '/delete/file', { data: this.tempAppData }).then(() => {
+            axiosInstance.delete(this.$route.path + '/delete/file', { data: this.tempAppData }).then(() => {
                 this.$message({
                     type: 'success',
                     message: '文件删除成功!'
@@ -251,11 +282,11 @@ export default {
                 })
             })
             this.tempAppData = {}
-            this.$emit('update')
+            this.$emit('updateApps')
         },
 
         getUploadAdress() {
-            return this.server + '/apps/app/upload'
+            return 'http://localhost:8080/apps/app/upload'
         },
     },
 
@@ -264,7 +295,7 @@ export default {
             get() { return this.visable },
             set(newVisable) { this.$emit('update:visable', newVisable) }
         },
-    },
+    }
 }
 </script>
 

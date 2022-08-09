@@ -2,7 +2,7 @@
     <el-card class="app">
         <div slot="header" class="app-header">
             <el-link type="primary" :underline="false" @click="infoApp">{{ appData.title }}</el-link>
-            <el-button style="float: right;padding: 8px" type="danger" :disabled="this.appData.state === 'running'"
+            <el-button style="float: right;padding: 8px" type="danger" :disabled="appState === 'running'"
                 @click="deleteApp">删除
             </el-button>
         </div>
@@ -17,33 +17,36 @@
                 <el-button type="primary" circle icon="el-icon-finished" @click="infoApp"></el-button>
             </el-tooltip>
         </div>
-        <router-view :visable.sync="dialogVisible" :dialogTitle="appData.title" :server="server"
-            :dialogMode="dialogMode" :appData="appData" @update="updateApp"></router-view>
+        <DialogItem :visable.sync="dialogVisible" :dialogTitle="appData.title" :dialogMode="dialogMode"
+            :appData="appData" :appState="appState" @updateApps="updateApps" @updateAppState="updateAppState">
+        </DialogItem>
     </el-card>
 </template>
 
 <script>
-import axios from 'axios'
+import DialogItem from './DialogItem.vue'
+import axiosInstance from '@/utils/axios'
 export default {
     name: 'AppItem',
     data() {
         return {
+            appData: this.AppData,
+            appState: 'normal',
             dialogVisible: false,
             dialogMode: 'appItem'
         }
     },
     props: {
-        appData: {
+        AppData: {
             type: Object,
-        },
-        server: {
-            type: String,
-            default: ''
         }
     },
     methods: {
-        updateApp() {
-            this.$emit('update')
+        updateApps() {
+            this.$emit('updateApps')
+        },
+        updateAppState(state) {
+            this.appState = state
         },
         deleteApp() {
             this.$confirm('此操作将永久删除该应用, 是否继续?', '提示', {
@@ -51,14 +54,14 @@ export default {
                 cancelButtonText: '取消',
                 type: 'warning'
             }).then(() => {
-                axios.delete(this.server + this.$route.path + '/delete', { data: this.appData }).then((res) => {
+                axiosInstance.delete(this.$route.path + '/delete', { data: this.appData }).then((res) => {
                     console.log('delete:', res.data)
                     this.$notify({
                         title: '删除成功',
                         message: this.appData.title + '删除成功',
                         type: 'success'
                     })
-                    this.$emit('update')
+                    this.$emit('updateApps')
                 }).catch((err) => {
                     console.log(err)
                     this.$notify({
@@ -83,14 +86,22 @@ export default {
                 }
             )
         }
+    },
+    watch: {
+        AppData() {
+            this.appData = this.AppData
+        }
+    },
+    components: {
+        DialogItem
     }
 }
 </script>
 
 <style>
 .app {
+    width: 300px;
     height: 150px;
-    flex-basis: 20%;
     margin: 10px;
 }
 
